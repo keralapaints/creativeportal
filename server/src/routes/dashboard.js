@@ -3,7 +3,7 @@ import Requirement from '../models/Requirement.js';
 import Task from '../models/Task.js';
 import User from '../models/User.js';
 import Notification from '../models/Notification.js';
-import { protect, isManager, isWorker, isVendor, canRaise } from '../middleware/auth.js';
+import { protect, isManager, isAdmin, isWorker, isVendor, canRaise } from '../middleware/auth.js';
 import { DEPARTMENTS, ACTIVE_TASK, OPEN_REQUIREMENT, FULFILLED_REQUIREMENT, PRIORITIES } from '../utils/config.js';
 import { endOfToday } from '../utils/dates.js';
 import { annotateQueues } from '../services/ordering.js';
@@ -128,7 +128,7 @@ router.get('/', async (req, res) => {
       pendingTaskReview: review.slice(0, 15),
       byDepartment,
     });
-    if (u.role === 'admin') {
+        if (isAdmin(u)) {
       const users = await User.aggregate([{ $match: { active: true } }, { $group: { _id: '$role', n: { $sum: 1 } } }]);
       out.users = Object.fromEntries(users.map((x) => [x._id, x.n]));
     }

@@ -1,7 +1,10 @@
 // Single source of truth for roles, departments, statuses. The client reads it through GET /api/meta.
 // Requirement categories (Campaign Creative, Daily Poster…) live in the database so the admin can add more.
 
-export const ROLES = { admin: 'Admin', coordinator: 'Coordinator', staff: 'Staff', vendor: 'External Vendor' };
+export const ROLES = { director: 'Director', admin: 'Admin', coordinator: 'Coordinator', staff: 'Staff', vendor: 'External Vendor' };
+// Directors (CEOs) have exactly the same powers as admins
+export const ADMIN_ROLES = ['admin', 'director'];
+export const MANAGER_ROLES = [...ADMIN_ROLES, 'coordinator'];
 
 export const DEPARTMENTS = {
   marketing: { label: 'Marketing Team', raises: true, works: false },

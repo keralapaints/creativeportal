@@ -7,7 +7,7 @@ import { useToast } from '../context/ToastContext.jsx';
 import TaskRow from '../components/TaskRow.jsx';
 import StatusFlow from '../components/StatusFlow.jsx';
 import { Avatar, DeptTag, Due, Loader, Modal, PriorityPill, ReqStatus, UsageTag, Empty, PerformancePill } from '../components/ui.jsx';
-import { OPEN_REQUIREMENT, FULFILLED_REQUIREMENT, ago, canMarkUsage, fmtDate, fmtDateTime, isManager, toInputDate, money } from '../utils.js';
+import { OPEN_REQUIREMENT, FULFILLED_REQUIREMENT, ago, canMarkUsage, fmtDate, fmtDateTime, isManager, isAdmin, toInputDate, money } from '../utils.js';
 
 const strip = (l) => l.replace(/^https?:\/\//, '').slice(0, 70);
 const activeCategories = (meta) => Object.entries(meta.USAGE_TYPES).filter(([, c]) => c.active !== false);
@@ -296,7 +296,7 @@ export default function RequirementDetail() {
   const [err, setErr] = useState('');
   const [modal, setModal] = useState(null);
   const [comment, setComment] = useState('');
-  const manager = isManager(user);
+  const manager = isManager(user); // director, admin or coordinator
 
   const load = useCallback(() => api(`/requirements/${id}`).then(setR).catch((e) => setErr(e.message)), [id]);
   useEffect(() => {
@@ -478,7 +478,7 @@ export default function RequirementDetail() {
           </section>
           <div className="row">
             {open && (manager || owner) && <button className="btn danger sm" onClick={cancel}><Ban size={15} /> Cancel requirement</button>}
-            {user.role === 'admin' && (
+            {isAdmin(user) && (
               <button className="btn danger sm" onClick={async () => {
                 if (!window.confirm('Delete this requirement and all its tasks permanently?')) return;
                 try { await api(`/requirements/${id}`, { method: 'DELETE' }); toast('Deleted'); nav('/requirements'); } catch (e) { toast(e.message, 'err'); }

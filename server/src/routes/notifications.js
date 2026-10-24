@@ -44,7 +44,7 @@ router.post('/alert', async (req, res) => {
   if (!title?.trim() || !message?.trim()) return res.status(400).json({ message: 'Add a title and a message.' });
   const f = { active: true };
   if (target === 'department') { if (!DEPARTMENTS[department]) return res.status(400).json({ message: 'Pick a department.' }); f.department = department; }
-  else if (target === 'role') { if (!['coordinator', 'staff', 'vendor'].includes(role)) return res.status(400).json({ message: 'Pick a role.' }); f.role = role; }
+  else if (target === 'role') { if (!['director', 'admin', 'coordinator', 'staff', 'vendor'].includes(role)) return res.status(400).json({ message: 'Pick a role.' }); f.role = role; }
   else if (target === 'users') { f._id = { $in: userIds.filter((id) => mongoose.isValidObjectId(id)) }; }
   const users = await User.find(f).select('_id');
   const ids = users.map((u) => u._id).filter((id) => String(id) !== String(req.user._id));

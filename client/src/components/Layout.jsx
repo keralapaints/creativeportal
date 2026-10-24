@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { Avatar, Modal } from './ui.jsx';
 import { api, patch } from '../api.js';
-import { canRaise, isManager, isWorker, isVendor } from '../utils.js';
+import { canRaise, isManager, isAdmin, isWorker, isVendor } from '../utils.js';
 
 function Brand() {
   return (
@@ -93,8 +93,8 @@ export default function Layout() {
     { to: '/notifications', label: 'Notifications', short: 'Alerts', icon: Bell, count: unread },
     manager && { to: '/reports', label: 'Reports & analytics', short: 'Reports', icon: BarChart3 },
     manager && { to: '/audit', label: 'Audit log', icon: History },
-    user.role === 'admin' && { to: '/users', label: 'Users & roles', icon: Users },
-    user.role === 'admin' && { to: '/settings', label: 'Requirement types', short: 'Settings', icon: SlidersHorizontal },
+       isAdmin(user) && { to: '/users', label: 'Users & roles', icon: Users },
+    isAdmin(user) && { to: '/settings', label: 'Requirement types', short: 'Settings', icon: SlidersHorizontal },
   ]).filter(Boolean);
 
   const tabs = vendor ? links : [

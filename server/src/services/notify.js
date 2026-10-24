@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import User from '../models/User.js';
 import Notification from '../models/Notification.js';
+import { MANAGER_ROLES } from '../utils/config.js';
 
 let transporter = null;
 if (process.env.SMTP_HOST) {
@@ -50,7 +51,7 @@ export async function notify(recipients, { type, title, message, link, actor }) 
 }
 
 export async function managerIds() {
-  const list = await User.find({ role: { $in: ['admin', 'coordinator'] }, active: true }).select('_id');
+    const list = await User.find({ role: { $in: MANAGER_ROLES }, active: true }).select('_id');
   return list.map((u) => u._id);
 }
 

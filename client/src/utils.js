@@ -33,7 +33,9 @@ export const cap = (s = '') => s.charAt(0).toUpperCase() + s.slice(1);
 export const ACTIVE_TASK = ['open', 'assigned', 'in_progress'];
 
 /* permissions (mirror of the server) */
-export const isManager = (u) => u && (u.role === 'admin' || u.role === 'coordinator');
+// Directors (CEOs) have exactly the same powers as admins
+export const isAdmin = (u) => Boolean(u && ['admin', 'director'].includes(u.role));
+export const isManager = (u) => Boolean(u && (isAdmin(u) || u.role === 'coordinator'));
 export const canRaise = (u, meta) => u && (isManager(u) || (u.role === 'staff' && Boolean(meta?.DEPARTMENTS?.[u.department]?.raises)));
 export const isWorker = (u, meta) => u && u.role === 'staff' && Boolean(meta?.DEPARTMENTS?.[u.department]?.works);
 

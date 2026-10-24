@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
-import { DEPARTMENTS, WORK_DEPARTMENTS } from '../utils/config.js';
+import { DEPARTMENTS, WORK_DEPARTMENTS, ADMIN_ROLES, MANAGER_ROLES } from '../utils/config.js';
 
 export async function protect(req, res, next) {
   const header = req.headers.authorization || '';
@@ -28,7 +28,9 @@ export const noVendor = (req, res, next) => {
   next();
 };
 
-export const isManager = (u) => u.role === 'admin' || u.role === 'coordinator';
+export const isAdmin = (u) => ADMIN_ROLES.includes(u.role);          // admin + director
+export const isManager = (u) => MANAGER_ROLES.includes(u.role);      // admin + director + coordinator
+export const allowAdmin = (req, res, next) => (isAdmin(req.user) ? next() : res.status(403).json({ message: 'Only an admin or director can do this.' }));
 export const isVendor = (u) => u.role === 'vendor';
 export const canRaise = (u) => isManager(u) || (u.role === 'staff' && Boolean(DEPARTMENTS[u.department]?.raises));
 export const isWorker = (u) => u.role === 'staff' && WORK_DEPARTMENTS.includes(u.department);

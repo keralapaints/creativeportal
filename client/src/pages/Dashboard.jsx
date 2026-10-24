@@ -8,7 +8,7 @@ import TaskRow from '../components/TaskRow.jsx';
 import Analytics from '../components/Analytics.jsx';
 import StatusFlow from '../components/StatusFlow.jsx';
 import { Loader, Empty, DeptTag, Due, PriorityPill, ReqStatus, UsageTag, Stat, PerformancePill, Modal, Avatar } from '../components/ui.jsx';
-import { canRaise, isManager, isVendor, ago, fmtDate, money, OPEN_REQUIREMENT, ACTIVE_TASKS } from '../utils.js';
+import { canRaise, isManager, isAdmin, isVendor, ago, fmtDate, OPEN_REQUIREMENT, ACTIVE_TASKS } from '../utils.js';
 
 function Panel({ title, note, children, link, className = '' }) {
   return (
@@ -62,7 +62,7 @@ function RequirementList({ list, meta, showTasks, action, empty = 'Nothing here'
   );
 }
 
-/* ---------------- Alert popup (custom alerts from admin / coordinator) ---------------- */
+/* ---------------- Alert popup (custom alerts from director / admin / coordinator) ---------------- */
 function AlertPopup() {
   const [alerts, setAlerts] = useState([]);
   useEffect(() => { api('/notifications?unread=true&type=alert&limit=10').then((r) => setAlerts(r.items)).catch(() => {}); }, []);
@@ -87,7 +87,7 @@ function AlertPopup() {
   );
 }
 
-/* ---------------- Coordinator / Admin ---------------- */
+/* ---------------- Director / Admin / Coordinator ---------------- */
 function ManagerView({ d, meta, user }) {
   const c = d.counts;
   const o = d.outsourced;
@@ -213,8 +213,8 @@ function ManagerView({ d, meta, user }) {
 
       <div className="dash-grid mt">
         <Link to="/reports" className="panel link-panel"><BarChart3 size={20} /><div><h3>Reports & analytics</h3><p className="small muted">Filters, staff, outsourcing, campaigns, performance</p></div></Link>
-        {user.role === 'admin' && d.users
-          ? <Link to="/users" className="panel link-panel"><Users size={20} /><div><h3>User & role management</h3><p className="small muted">{d.users.admin || 0} admins, {d.users.coordinator || 0} coordinators, {d.users.staff || 0} staff, {d.users.vendor || 0} vendors</p></div></Link>
+        {isAdmin(user) && d.users
+          ? <Link to="/users" className="panel link-panel"><Users size={20} /><div><h3>User & role management</h3><p className="small muted">{d.users.director || 0} directors, {d.users.admin || 0} admins, {d.users.coordinator || 0} coordinators, {d.users.staff || 0} staff, {d.users.vendor || 0} vendors</p></div></Link>
           : <Link to="/audit" className="panel link-panel"><History size={20} /><div><h3>Audit log</h3><p className="small muted">Every status change and action</p></div></Link>}
       </div>
     </>
@@ -339,6 +339,8 @@ function VendorView({ v, meta }) {
   );
 }
 
+const ROLE_TITLE = { director: 'Director dashboard', admin: 'Admin dashboard', coordinator: 'Coordinator dashboard' };
+
 export default function Dashboard() {
   const { user, meta } = useAuth();
   const toast = useToast();
@@ -356,7 +358,7 @@ export default function Dashboard() {
   const h = new Date().getHours();
   const hello = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   const title = isVendor(user) ? `External vendor · ${user.company || ''}`
-    : { admin: 'Admin dashboard', coordinator: 'Coordinator dashboard' }[user.role]
+    : ROLE_TITLE[user.role]
       || [d.raiser && (d.raiser.marketing ? 'Marketing dashboard' : 'Requirement raiser dashboard'), d.staff && 'Staff dashboard'].filter(Boolean).join(' · ');
 
   return (

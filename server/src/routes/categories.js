@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import Category from '../models/Category.js';
-import { protect, allow } from '../middleware/auth.js';
+import { protect, allowAdmin } from '../middleware/auth.js';
 
 const router = Router();
 router.use(protect);
@@ -12,7 +12,7 @@ router.get('/', async (_req, res) => {
 });
 
 // Requirement categories are customizable by the admin
-router.post('/', allow('admin'), async (req, res) => {
+router.post('/', allowAdmin, async (req, res) => {
   const label = req.body.label?.trim();
   if (!label) return res.status(400).json({ message: 'Give the category a name.' });
   const key = slug(req.body.key || label);
@@ -22,7 +22,7 @@ router.post('/', allow('admin'), async (req, res) => {
   res.status(201).json(await Category.create({ key, label, hint: req.body.hint, order: (last?.order ?? -1) + 1 }));
 });
 
-router.patch('/:id', allow('admin'), async (req, res) => {
+router.patch('/:id', allowAdmin, async (req, res) => {
   const c = await Category.findById(req.params.id);
   if (!c) return res.status(404).json({ message: 'Category not found.' });
   ['label', 'hint', 'active', 'order'].forEach((f) => { if (req.body[f] !== undefined) c[f] = req.body[f]; });

@@ -4,7 +4,7 @@ import { protect, allow } from '../middleware/auth.js';
 import { escapeRx } from '../utils/dates.js';
 
 const router = Router();
-router.use(protect, allow('admin', 'coordinator'));
+router.use(protect, allow('admin', 'director', 'coordinator'));
 
 router.get('/', async (req, res) => {
   const { entity, q, before } = req.query;

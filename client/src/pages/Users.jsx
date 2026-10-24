@@ -4,13 +4,18 @@ import { api, post, patch } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { Avatar, Loader, Modal, DeptTag, Empty } from '../components/ui.jsx';
+import { isAdmin } from '../utils.js';
 
 const ROLE_HELP = {
+  director: 'Director (CEO): same full access as Admin – users, requirement types, reports, audit log and delete.',
   admin: 'Full access: users, requirement types, reports, audit log and delete.',
   coordinator: 'Reviews and approves requirements, assigns or outsources tasks, sets priorities, reviews work, sends alerts.',
   staff: 'Raises requirements (Marketing, Tech, Outlet, Production) and/or works on tasks (Creative, Production).',
   vendor: 'Limited access: sees only the outsourced projects sent to them. Can mark them ongoing, pause/resume and submit Drive links.',
 };
+
+// Order inside the "Directors, admins and coordinators" group
+const MANAGER_ORDER = { director: 0, admin: 1, coordinator: 2 };
 
 function PersonModal({ person, me, meta, onClose, onSaved }) {
   const editing = Boolean(person);
@@ -80,11 +85,15 @@ export default function Users() {
   const [modal, setModal] = useState(null);
 
   useEffect(() => { api('/users').then(setPeople).catch((e) => toast(e.message, 'err')); }, [toast]);
-  if (user.role !== 'admin') return <Empty title="Only admins manage users and roles" />;
+  if (!isAdmin(user)) return <Empty title="Only admins and directors manage users and roles" />;
   if (!people) return <Loader />;
 
+  const managers = people
+    .filter((p) => p.role in MANAGER_ORDER)
+    .sort((a, b) => MANAGER_ORDER[a.role] - MANAGER_ORDER[b.role] || a.name.localeCompare(b.name));
+
   const groups = [
-    { key: 'managers', label: 'Admins and coordinators', list: people.filter((p) => ['admin', 'coordinator'].includes(p.role)) },
+    { key: 'managers', label: 'Directors, admins and coordinators', list: managers },
     ...Object.entries(meta.DEPARTMENTS).map(([k, d]) => ({
       key: k, label: d.label,
       note: [d.raises && 'raises requirements', d.works && 'works on tasks'].filter(Boolean).join(', '),
@@ -94,13 +103,18 @@ export default function Users() {
   ];
   const activeCount = people.filter((p) => p.active).length;
   const vendorCount = people.filter((p) => p.role === 'vendor' && p.active).length;
+  const directorCount = people.filter((p) => p.role === 'director' && p.active).length;
 
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Users & roles</h1>
-          <p className="muted">{activeCount} active users across {Object.keys(meta.DEPARTMENTS).length} departments{vendorCount ? `, including ${vendorCount} external vendor${vendorCount > 1 ? 's' : ''}` : ''}.</p>
+          <p className="muted">
+            {activeCount} active users across {Object.keys(meta.DEPARTMENTS).length} departments
+            {directorCount ? `, ${directorCount} director${directorCount > 1 ? 's' : ''}` : ''}
+            {vendorCount ? `, ${vendorCount} external vendor${vendorCount > 1 ? 's' : ''}` : ''}.
+          </p>
         </div>
         <button className="btn" onClick={() => setModal({ person: null })}><UserPlus size={18} /> Add user</button>
       </div>
@@ -124,7 +138,7 @@ export default function Users() {
                   <tr key={p._id} className={p.active === false ? 'off' : ''}>
                     <td><span className="row" style={{ gap: 10, flexWrap: 'nowrap' }}><Avatar name={p.name} department={p.department} size="sm" /><b style={{ fontWeight: 600 }}>{p.name}</b>{p._id === user._id && <span className="pill">You</span>}{p.active === false && <span className="pill">Inactive</span>}</span></td>
                     <td className="muted">{p.email}</td>
-                    <td>{meta.ROLES[p.role]}</td>
+                    <td>{p.role === 'director' ? <span className="pill director-pill">{meta.ROLES[p.role]}</span> : meta.ROLES[p.role]}</td>
                     {g.key === 'managers' && <td>{p.department ? <DeptTag dept={p.department} meta={meta} /> : <span className="muted">—</span>}</td>}
                     {g.key === 'vendors' && <td>{p.company || <span className="muted">—</span>}</td>}
                     {g.key === 'vendors' && <td className="small">{p.phone || <span className="muted">—</span>}</td>}

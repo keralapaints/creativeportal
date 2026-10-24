@@ -5,7 +5,7 @@ import Task from '../models/Task.js';
 import Campaign from '../models/Campaign.js';
 import { categoryMap } from '../models/Category.js';
 import { nextSeq } from '../models/Counter.js';
-import { protect, noVendor, isManager, canRaise, canMarkUsage } from '../middleware/auth.js';
+import { protect, noVendor, isManager, isAdmin, canRaise, canMarkUsage } from '../middleware/auth.js';
 import {
   DEPARTMENTS, WORK_DEPARTMENTS, REQUIREMENT_TYPES, PRIORITIES, ACTIVE_TASK, OPEN_REQUIREMENT, FULFILLED_REQUIREMENT,
   REQUIREMENT_STATUS, PERFORMANCE,
@@ -341,7 +341,7 @@ router.post('/:id/comments', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
-  if (req.user.role !== 'admin') return fail(res, 403, 'Only an admin can delete requirements.');
+    if (!isAdmin(req.user)) return fail(res, 403, 'Only an admin or director can delete requirements.');
   if (!valid(req.params.id)) return fail(res, 404, 'Requirement not found.');
   const tasks = await Task.find({ requirement: req.params.id });
   await Task.deleteMany({ requirement: req.params.id });

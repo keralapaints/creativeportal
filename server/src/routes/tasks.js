@@ -4,7 +4,7 @@ import Task from '../models/Task.js';
 import Requirement from '../models/Requirement.js';
 import User from '../models/User.js';
 import { nextSeq } from '../models/Counter.js';
-import { protect, isManager, isWorker, isVendor } from '../middleware/auth.js';
+import { protect, isManager, isAdmin, isWorker, isVendor } from '../middleware/auth.js';
 import { DEPARTMENTS, WORK_DEPARTMENTS, PRIORITIES, PRIORITY_RANK, ACTIVE_TASK, TASK_STATUS, OPEN_REQUIREMENT } from '../utils/config.js';
 import { endOfToday, escapeRx } from '../utils/dates.js';
 import { placeTask, compactGroup, scopeOf, annotateQueues } from '../services/ordering.js';
@@ -496,7 +496,7 @@ router.post('/:id/comments', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
-  if (req.user.role !== 'admin') return fail(res, 403, 'Only an admin can delete tasks.');
+    if (!isAdmin(req.user)) return fail(res, 403, 'Only an admin or director can delete tasks.');
   const t = await load(req, res); if (!t) return;
   const scope = scopeOf(t);
   await t.deleteOne();

@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { Bell, UserPlus, AlertTriangle, CheckCircle2, Clock, MessageSquare, Inbox, Mail, BadgeCheck, Flag, RefreshCw, BellRing, Send } from 'lucide-react';
 import { api, post } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useToast } from '../context/ToastContext.jsx';
 import { Loader, Empty, Modal } from '../components/ui.jsx';
 import { ago, fmtDateTime, isManager } from '../utils.js';
-import { useToast } from '../context/ToastContext.jsx';
 
 // Icon per notification type (sent by the server in notification.type)
 const ICON = {
@@ -25,37 +25,73 @@ const ICON = {
   alert: BellRing,
 };
 
-// Admin / coordinator: send a custom alert (shows as a popup on the receivers' dashboard)
-function AlertModal({ meta, onClose }) {
+// Roles an alert can be sent to, in the order shown in the dropdown
+const ALERT_ROLES = ['staff', 'coordinator', 'vendor', 'admin', 'director'];
+
+// Director / admin / coordinator: send a custom alert (shows as a popup on the receivers' dashboard)
+function AlertModal({ meta, me, onClose }) {
   const toast = useToast();
   const [people, setPeople] = useState([]);
   const [f, setF] = useState({ target: 'department', department: 'creative', role: 'staff', userIds: [], title: '', message: '' });
   const [err, setErr] = useState('');
-  useEffect(() => { api('/users?active=true').then(setPeople).catch(() => {}); }, []);
+  const [busy, setBusy] = useState(false);
+
+  // Everyone active except yourself (you never get your own alert)
+  useEffect(() => { api('/users?active=true').then((list) => setPeople(list.filter((p) => p._id !== me._id))).catch(() => {}); }, [me._id]);
+
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const toggle = (id) => set('userIds', f.userIds.includes(id) ? f.userIds.filter((x) => x !== id) : [...f.userIds, id]);
+
   const submit = async (e) => {
     e.preventDefault(); setErr('');
-    try { const r = await post('/notifications/alert', f); toast(`Alert sent to ${r.sent} ${r.sent === 1 ? 'person' : 'people'}`); onClose(); } catch (ex) { setErr(ex.message); }
+    if (f.target === 'users' && !f.userIds.length) { setErr('Pick at least one person.'); return; }
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await post('/notifications/alert', f);
+      toast(`Alert sent to ${r.sent} ${r.sent === 1 ? 'person' : 'people'}`);
+      onClose();
+    } catch (ex) { setErr(ex.message); } finally { setBusy(false); }
   };
+
   return (
     <Modal title="Send an alert" onClose={onClose}>
       <form className="stack" onSubmit={submit}>
         <div className="field"><span>Send to</span>
           <div className="seg" role="group">
-            {[['department', 'A department'], ['role', 'A role'], ['users', 'Specific people'], ['all', 'Everyone']].map(([k, l]) => <button type="button" key={k} aria-pressed={f.target === k} onClick={() => set('target', k)}>{l}</button>)}
+            {[['department', 'A department'], ['role', 'A role'], ['users', 'Specific people'], ['all', 'Everyone']].map(([k, l]) => (
+              <button type="button" key={k} aria-pressed={f.target === k} onClick={() => set('target', k)}>{l}</button>
+            ))}
           </div>
         </div>
-        {f.target === 'department' && <select className="select" value={f.department} onChange={(e) => set('department', e.target.value)}>{Object.entries(meta.DEPARTMENTS).map(([k, d]) => <option key={k} value={k}>{d.label}</option>)}</select>}
-        {f.target === 'role' && <select className="select" value={f.role} onChange={(e) => set('role', e.target.value)}>{['staff', 'coordinator', 'vendor'].map((r) => <option key={r} value={r}>{meta.ROLES[r]}</option>)}</select>}
-        {f.target === 'users' && (
-          <div className="pick-list">{people.map((p) => (
-            <label key={p._id} className="row small"><input type="checkbox" checked={f.userIds.includes(p._id)} onChange={() => set('userIds', f.userIds.includes(p._id) ? f.userIds.filter((x) => x !== p._id) : [...f.userIds, p._id])} /> {p.name} <span className="muted">{p.company || meta.DEPARTMENTS[p.department]?.label || meta.ROLES[p.role]}</span></label>
-          ))}</div>
+
+        {f.target === 'department' && (
+          <select className="select" value={f.department} onChange={(e) => set('department', e.target.value)} aria-label="Department">
+            {Object.entries(meta.DEPARTMENTS).map(([k, d]) => <option key={k} value={k}>{d.label}</option>)}
+          </select>
         )}
+        {f.target === 'role' && (
+          <select className="select" value={f.role} onChange={(e) => set('role', e.target.value)} aria-label="Role">
+            {ALERT_ROLES.filter((r) => meta.ROLES[r]).map((r) => <option key={r} value={r}>{meta.ROLES[r]}</option>)}
+          </select>
+        )}
+        {f.target === 'users' && (
+          <div className="pick-list">
+            {people.length === 0 && <span className="small muted">Loading people…</span>}
+            {people.map((p) => (
+              <label key={p._id} className="row small">
+                <input type="checkbox" checked={f.userIds.includes(p._id)} onChange={() => toggle(p._id)} /> {p.name}{' '}
+                <span className="muted">{p.company || meta.DEPARTMENTS[p.department]?.label || meta.ROLES[p.role]}</span>
+              </label>
+            ))}
+          </div>
+        )}
+
         <label className="field"><span>Title</span><input className="input" required value={f.title} onChange={(e) => set('title', e.target.value)} placeholder="e.g. Please complete pending tasks" /></label>
         <label className="field"><span>Message</span><textarea className="textarea" required value={f.message} onChange={(e) => set('message', e.target.value)} /></label>
+        <p className="tiny muted">It pops up on their dashboard the next time they open the portal{meta.emailEnabled ? ' and is sent by email' : ''}.</p>
         {err && <div className="error-box">{err}</div>}
-        <button className="btn"><Send size={16} /> Send alert</button>
+        <button className="btn" disabled={busy}><Send size={16} /> {busy ? 'Sending…' : 'Send alert'}</button>
       </form>
     </Modal>
   );
@@ -109,7 +145,7 @@ export default function Notifications() {
 
       {data.items.length === 0 ? (
         <Empty title={onlyUnread ? 'No unread notifications' : 'No notifications'}>
-          You'll hear about new requirements, assignments, status changes, fulfilment, update requests, usage updates, conflicts and deadlines here.
+          You'll hear about new requirements, assignments, status changes, fulfilment, update requests, usage updates, conflicts, alerts and deadlines here.
         </Empty>
       ) : (
         <section className="panel" style={{ padding: 8 }}>
@@ -131,7 +167,7 @@ export default function Notifications() {
           })}
         </section>
       )}
-      {alertOpen && <AlertModal meta={meta} onClose={() => setAlertOpen(false)} />}
+      {alertOpen && <AlertModal meta={meta} me={user} onClose={() => setAlertOpen(false)} />}
     </>
   );
 }

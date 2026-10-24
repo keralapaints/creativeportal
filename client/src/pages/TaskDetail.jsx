@@ -5,7 +5,7 @@ import { api, post, patch } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { Avatar, DeptTag, Due, Loader, Modal, PriorityPill, TaskStatus, ConflictPill, PerformancePill } from '../components/ui.jsx';
-import { ACTIVE_TASKS as ACTIVE_TASK, ago, fmtDate, fmtDateTime, isManager, isVendor, toInputDate, cap, money } from '../utils.js';
+import { ACTIVE_TASKS as ACTIVE_TASK, ago, fmtDate, fmtDateTime, isManager, isAdmin, isVendor, toInputDate, cap, money } from '../utils.js';
 
 const stripUrl = (l) => l.replace(/^https?:\/\//, '').slice(0, 70);
 
@@ -15,10 +15,17 @@ function CompleteModal({ t, onClose, onSave }) {
   const [driveLink, setLink] = useState(isUpdate ? '' : t.driveLink || '');
   const [note, setNote] = useState('');
   const [check, setCheck] = useState(null);
+  const [busy, setBusy] = useState(false);
   const verify = async () => { setCheck({ loading: true }); try { setCheck(await post('/drive/validate', { url: driveLink })); } catch (e) { setCheck({ valid: false, message: e.message }); } };
+  const submit = async (e) => {
+    e.preventDefault();
+    if (busy) return; // ignore a second click while saving
+    setBusy(true);
+    try { await onSave({ driveLink, note }); } finally { setBusy(false); }
+  };
   return (
     <Modal title={isUpdate ? `Submit update #${t.update.round}` : 'Mark as fulfilled'} onClose={onClose}>
-      <form className="stack" onSubmit={(e) => { e.preventDefault(); onSave({ driveLink, note }); }}>
+      <form className="stack" onSubmit={submit}>
         <p className="small muted">
           {isUpdate
             ? 'Upload the updated files to Google Drive, set sharing to "Anyone with the link", then paste the new link here.'
@@ -28,7 +35,7 @@ function CompleteModal({ t, onClose, onSave }) {
           <span>{isUpdate ? 'New Google Drive link' : 'Google Drive link'}</span>
           <div className="row" style={{ flexWrap: 'nowrap' }}>
             <input className="input" type="url" required placeholder="https://drive.google.com/…" value={driveLink} onChange={(e) => { setLink(e.target.value); setCheck(null); }} />
-            <button type="button" className="btn ghost" onClick={verify} disabled={!driveLink}><Link2 size={16} /> Check</button>
+            <button type="button" className="btn ghost" onClick={verify} disabled={!driveLink || busy}><Link2 size={16} /> Check</button>
           </div>
           {check && !check.loading && (
             <small className={check.valid && check.accessible !== false ? 'ok-text' : 'late-text'}>
@@ -38,7 +45,9 @@ function CompleteModal({ t, onClose, onSave }) {
           {isUpdate && t.driveLink && <small>Previous link: <a href={t.driveLink} target="_blank" rel="noreferrer">{stripUrl(t.driveLink)}</a></small>}
         </label>
         <label className="field"><span>Note for the reviewer <span className="muted">(optional)</span></span><textarea className="textarea" value={note} onChange={(e) => setNote(e.target.value)} placeholder={isUpdate ? 'What you changed' : ''} /></label>
-        <button className="btn go"><CheckCircle2 size={17} /> {isUpdate ? 'Submit updated deliverable' : 'Submit and mark fulfilled'}</button>
+        <button className="btn go" disabled={busy}>
+          <CheckCircle2 size={17} /> {busy ? 'Submitting…' : isUpdate ? 'Submit updated deliverable' : 'Submit and mark fulfilled'}
+        </button>
       </form>
     </Modal>
   );
@@ -153,7 +162,7 @@ export default function TaskDetail() {
   const [err, setErr] = useState('');
   const [modal, setModal] = useState(null);
   const [comment, setComment] = useState('');
-  const manager = isManager(user);
+  const manager = isManager(user); // director, admin or coordinator
 
   const load = useCallback(() => api(`/tasks/${id}`).then(setT).catch((e) => setErr(e.message)), [id]);
   useEffect(() => { load(); if (manager) api('/users?active=true&role=staff').then(setPeople).catch(() => {}); }, [load, manager]);
@@ -164,7 +173,11 @@ export default function TaskDetail() {
       setT(next); setModal(null);
       if (next.warning) toast(next.warning, 'err'); else if (msg) toast(msg);
       window.dispatchEvent(new Event('cd:notifications'));
-    } catch (e) { toast(e.message, 'err'); }
+    } catch (e) {
+      toast(e.message, 'err');
+      // The task changed meanwhile (another tab, or someone else acted): close the form and show the real status
+      if (/cannot be completed now|already|only submitted|not paused/i.test(e.message)) { setModal(null); load(); }
+    }
   };
 
   if (err) return <div className="error-box">{err}</div>;
@@ -251,7 +264,7 @@ export default function TaskDetail() {
             <section className="panel conflict-panel">
               <h2 className="row" style={{ gap: 8 }}><AlertTriangle size={18} /> Conflict raised</h2>
               <p style={{ marginTop: 8 }}>{t.conflict.reason}</p>
-              <p className="small muted" style={{ marginTop: 6 }}>By {t.conflict.raisedBy?.name} · {ago(t.conflict.raisedAt)}. Admin and coordinator have been notified.</p>
+              <p className="small muted" style={{ marginTop: 6 }}>By {t.conflict.raisedBy?.name} · {ago(t.conflict.raisedAt)}. Coordinators, admins and directors have been notified.</p>
             </section>
           )}
 
@@ -335,10 +348,10 @@ export default function TaskDetail() {
               ))}
             </ul>
           </section>
-          {user.role === 'admin' && (
+          {isAdmin(user) && (
             <button className="btn danger sm" style={{ alignSelf: 'flex-start' }} onClick={async () => {
               if (!window.confirm('Delete this task permanently?')) return;
-              try { await api(`/tasks/${id}`, { method: 'DELETE' }); toast('Deleted'); nav('/tasks'); } catch (e) { toast(e.message, 'err'); }
+              try { await api(`/tasks/${id}`, { method: 'DELETE' }); toast('Deleted'); nav(out ? '/outsourced' : '/tasks'); } catch (e) { toast(e.message, 'err'); }
             }}><Trash2 size={15} /> Delete task</button>
           )}
         </aside>
@@ -350,7 +363,7 @@ export default function TaskDetail() {
       {modal === 'resolve' && <PositionModal t={t} meta={meta} title="Resolve conflict" withResolution onClose={() => setModal(null)} onSave={(b) => act('conflict/resolve', b, 'Conflict resolved')} />}
       {modal === 'edit' && <EditModal t={t} meta={meta} onClose={() => setModal(null)} onSave={async (b) => { try { setT(await patch(`/tasks/${id}`, b)); setModal(null); toast('Saved'); } catch (e) { toast(e.message, 'err'); } }} />}
       {modal === 'conflict' && (
-        <TextModal title="Raise a conflict" label="What's the conflict?" button="Raise conflict" required onClose={() => setModal(null)} onSave={(reason) => act('conflict', { reason }, 'Conflict raised. Admin and coordinator notified')}>
+        <TextModal title="Raise a conflict" label="What's the conflict?" button="Raise conflict" required onClose={() => setModal(null)} onSave={(reason) => act('conflict', { reason }, 'Conflict raised. Coordinators have been notified')}>
           <p className="small muted">Use this when deadlines clash, priorities need re-ordering, or something blocks the work.</p>
         </TextModal>
       )}
