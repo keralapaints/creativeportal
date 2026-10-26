@@ -11,6 +11,7 @@ import { placeTask, compactGroup, scopeOf, annotateQueues } from '../services/or
 import { notify, managerIds, departmentStaffIds } from '../services/notify.js';
 import { checkDriveLink } from '../services/drive.js';
 import { syncRequirement } from '../services/requirements.js';
+import { celebrationFor, isOnTime } from '../services/streaks.js';
 
 const router = Router();
 router.use(protect);
@@ -407,13 +408,26 @@ router.post('/:id/complete', async (req, res) => {
   await t.save();
   await compactGroup(prio, scope);
 
+   const onTime = isOnTime(t);
   const reqDoc = await Requirement.findById(t.requirement).select('raisedBy code');
   notify([...(await managerIds()), reqDoc?.raisedBy], {
-    type: 'completed', title: t.update?.active ? `${t.code} update submitted` : `${t.code} fulfilled`,
-    message: `${outsourced(t) ? t.vendor?.name : req.user.name} ${t.update?.active ? 'submitted the updated deliverable for' : 'delivered'} "${t.title}" (${reqDoc?.code}). It is waiting for review.`,
+    type: 'completed', title: `${t.code} ${t.update?.active ? 'update submitted' : 'fulfilled'}${onTime ? ' · on time ✓' : ''}`,
+    message: `${outsourced(t) ? t.vendor?.name : req.user.name} ${t.update?.active ? 'submitted the updated deliverable for' : 'delivered'} "${t.title}" (${reqDoc?.code})${onTime ? ' on time' : ''}. It is waiting for review.`,
     link: link(t), actor: req.user,
   });
-  finish(req, res, t, drive.checked && !drive.accessible ? { warning: drive.message } : {});
+
+  // 🎉 Celebrate on-time delivery (only for the person who did the work)
+  const extra = drive.checked && !drive.accessible ? { warning: drive.message } : {};
+  if (onTime && isDoer(t, req.user)) {
+    extra.celebrate = await celebrationFor(t, req.user._id);
+    if (extra.celebrate?.unlocked) {
+      const b = extra.celebrate.unlocked;
+      // No actor here, so the creator gets it in their own notifications
+      notify([req.user._id], { type: 'kudos', title: `${b.emoji} Badge unlocked: ${b.name}`, message: `${b.at} on-time deliveries in a row. Brilliant work!`, link: '/' });
+      notify(await managerIds(), { type: 'kudos', title: `${b.emoji} ${req.user.name} unlocked "${b.name}"`, message: `${b.at} on-time deliveries in a row.`, link: link(t), actor: req.user });
+    }
+  }
+  finish(req, res, t, extra);
 });
 
 /* ---------- E. coordinator review → close or send back ---------- */

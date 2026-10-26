@@ -4,7 +4,7 @@ import { Bell } from 'lucide-react';
 import { api, post } from '../api.js';
 import { ago } from '../utils.js';
 
-const DOT = { alert: 'red', conflict: 'red', reminder: 'red', update_request: 'orange', fulfilled: 'green', completed: 'green', reviewed: 'green', usage: 'blue', task_assigned: 'blue', requirement_new: 'blue' };
+const DOT = { alert: 'red', conflict: 'red', reminder: 'red', update_request: 'orange', fulfilled: 'green', completed: 'green', reviewed: 'green', usage: 'blue', kudos: 'gold', task_assigned: 'blue', requirement_new: 'blue' };
 
 // Notification bell with a popup of the latest items
 export default function BellPopup({ unread, dark }) {

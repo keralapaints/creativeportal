@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, UserPlus, AlertTriangle, CheckCircle2, Clock, MessageSquare, Inbox, Mail, BadgeCheck, Flag, RefreshCw, BellRing, Send } from 'lucide-react';
+import { Bell, UserPlus, AlertTriangle, CheckCircle2, Clock, MessageSquare, Inbox, Mail, BadgeCheck, Flag, RefreshCw, BellRing, Send, Trophy } from 'lucide-react';
 import { api, post } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
@@ -23,6 +23,7 @@ const ICON = {
   usage: Flag,
   update_request: RefreshCw,
   alert: BellRing,
+  kudos: Trophy,
 };
 
 // Roles an alert can be sent to, in the order shown in the dropdown

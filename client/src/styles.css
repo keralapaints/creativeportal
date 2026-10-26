@@ -687,3 +687,35 @@ a.tile:hover, button.tile:hover { border-color: var(--ink-2); }
 .drawer-link .count { margin-left: auto; background: var(--camera); border-radius: 99px; padding: 0 7px; font-size: 0.75rem; font-weight: 600; }
 .side-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 22px; padding-right: 2px; }
 .side-top .brand { padding-bottom: 0; white-space: nowrap; font-size: 1.08rem; }
+/* ================= 🎉 On-time celebration ================= */
+.celebrate { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: rgba(15, 17, 24, 0.55); animation: cel-fade 0.25s ease-out; padding: 16px; }
+.celebrate-canvas { position: fixed; inset: 0; pointer-events: none; }
+.celebrate-card { position: relative; z-index: 1; width: min(420px, 100%); background: #fff; border-radius: 22px; padding: 28px 24px 22px; text-align: center; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35); animation: cel-pop 0.5s cubic-bezier(0.2, 1.4, 0.4, 1); display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.celebrate-emoji { font-size: 56px; line-height: 1; animation: cel-bounce 1.2s ease-in-out infinite; }
+.celebrate-card h2 { font-family: var(--display); font-size: 1.6rem; margin: 2px 0 0; }
+.celebrate-sub { color: var(--ink-2); margin: 0; }
+.celebrate-sub b { color: var(--flag-green); }
+.celebrate-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; margin: 6px 0 2px; }
+.celebrate-stats > div { background: #faf7ef; border-radius: 12px; padding: 10px 6px; display: flex; flex-direction: column; gap: 2px; }
+.cs-n { font-family: var(--display); font-weight: 750; font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.cs-l { font-size: 0.72rem; color: var(--muted); }
+.celebrate-card .btn { width: 100%; justify-content: center; margin-top: 6px; }
+.badge-unlock { display: flex; align-items: center; gap: 12px; text-align: left; width: 100%; padding: 12px 14px; border-radius: 14px; background: linear-gradient(135deg, #1c1f26, #3a2f12); color: #fff; animation: cel-shine 1.6s ease-in-out infinite alternate; }
+.badge-unlock .tiny { display: block; color: #f3d27a; text-transform: uppercase; letter-spacing: 0.06em; }
+.badge-unlock b { font-size: 1.05rem; }
+.badge-emoji { font-size: 34px; }
+@keyframes cel-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cel-pop { from { transform: scale(0.6) translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes cel-bounce { 0%, 100% { transform: translateY(0) rotate(-6deg); } 50% { transform: translateY(-8px) rotate(6deg); } }
+@keyframes cel-shine { from { box-shadow: 0 0 0 rgba(243, 210, 122, 0); } to { box-shadow: 0 0 22px rgba(243, 210, 122, 0.55); } }
+@media (prefers-reduced-motion: reduce) { .celebrate, .celebrate-card, .celebrate-emoji, .badge-unlock { animation: none; } }
+
+/* streak banner on the staff dashboard */
+.streak-banner { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; align-items: center; padding: 14px 18px; margin-bottom: 18px; border-radius: var(--r); background: linear-gradient(120deg, #fff4dc, #ffe6e0); border: 1px solid #f6d2a6; }
+.sb-fire { font-size: 30px; grid-row: span 2; }
+.sb-text { display: flex; flex-direction: column; gap: 2px; }
+.sb-text .small { color: var(--ink-2); }
+.sb-bar { grid-column: 2; height: 6px; border-radius: 99px; background: rgba(0, 0, 0, 0.08); overflow: hidden; }
+.sb-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #f8961e, #f94144); transition: width 0.6s ease; }
+.d-gold { background: #e0a400; }
+.n-kudos .notif-icon { background: #fff4d6; color: #b07d00; }

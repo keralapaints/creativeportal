@@ -5,6 +5,7 @@ import { api, post, patch } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { Avatar, DeptTag, Due, Loader, Modal, PriorityPill, TaskStatus, ConflictPill, PerformancePill } from '../components/ui.jsx';
+import Celebration from '../components/Celebration.jsx';
 import { ACTIVE_TASKS as ACTIVE_TASK, ago, fmtDate, fmtDateTime, isManager, isAdmin, isVendor, toInputDate, cap, money } from '../utils.js';
 
 const stripUrl = (l) => l.replace(/^https?:\/\//, '').slice(0, 70);
@@ -162,6 +163,7 @@ export default function TaskDetail() {
   const [err, setErr] = useState('');
   const [modal, setModal] = useState(null);
   const [comment, setComment] = useState('');
+  const [party, setParty] = useState(null); // 🎉 on-time celebration
   const manager = isManager(user); // director, admin or coordinator
 
   const load = useCallback(() => api(`/tasks/${id}`).then(setT).catch((e) => setErr(e.message)), [id]);
@@ -171,7 +173,8 @@ export default function TaskDetail() {
     try {
       const next = await post(`/tasks/${id}/${path}`, body);
       setT(next); setModal(null);
-      if (next.warning) toast(next.warning, 'err'); else if (msg) toast(msg);
+      if (next.celebrate?.onTime) setParty(next.celebrate);
+      if (next.warning) toast(next.warning, 'err'); else if (msg && !next.celebrate?.onTime) toast(msg);
       window.dispatchEvent(new Event('cd:notifications'));
     } catch (e) {
       toast(e.message, 'err');
@@ -356,7 +359,7 @@ export default function TaskDetail() {
           )}
         </aside>
       </div>
-
+      {party && <Celebration data={party} name={user.name} onClose={() => setParty(null)} />}
       {modal === 'complete' && <CompleteModal t={t} onClose={() => setModal(null)} onSave={(b) => act('complete', b, isUpdate ? 'Update submitted. The coordinator will review it' : 'Submitted. The coordinator will review it')} />}
       {modal === 'assign' && <AssignModal t={t} people={people} meta={meta} onClose={() => setModal(null)} onSave={(userId) => act('assign', { userId }, userId ? 'Assigned' : 'Unassigned')} />}
       {modal === 'position' && <PositionModal t={t} meta={meta} onClose={() => setModal(null)} onSave={(b) => act('position', b, 'Order updated')} />}

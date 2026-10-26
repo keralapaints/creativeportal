@@ -8,6 +8,7 @@ import { DEPARTMENTS, ACTIVE_TASK, OPEN_REQUIREMENT, FULFILLED_REQUIREMENT, PRIO
 import { endOfToday } from '../utils/dates.js';
 import { annotateQueues } from '../services/ordering.js';
 import { funnelSort } from './tasks.js';
+import { onTimeStats } from '../services/streaks.js';
 
 const router = Router();
 router.use(protect);
@@ -148,6 +149,7 @@ router.get('/', async (req, res) => {
       available,
       today: mine.filter((t) => ACTIVE_TASK.includes(t.status) && t.deadline && new Date(t.deadline) <= eod),
       closedThisMonth: closed.filter((t) => t.closedAt && new Date(t.closedAt) >= monthStart).length,
+       onTime: await onTimeStats(u._id),
     };
   }
 

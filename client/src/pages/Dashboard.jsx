@@ -7,6 +7,7 @@ import { useToast } from '../context/ToastContext.jsx';
 import TaskRow from '../components/TaskRow.jsx';
 import Analytics from '../components/Analytics.jsx';
 import StatusFlow from '../components/StatusFlow.jsx';
+import { StreakBanner } from '../components/Celebration.jsx';
 import { Loader, Empty, DeptTag, Due, PriorityPill, ReqStatus, UsageTag, Stat, PerformancePill, Modal, Avatar } from '../components/ui.jsx';
 import { canRaise, isManager, isAdmin, isVendor, ago, fmtDate, OPEN_REQUIREMENT, ACTIVE_TASKS } from '../utils.js';
 
@@ -239,6 +240,7 @@ function StaffView({ s, meta, onTake }) {
   const list = s.tasks.filter((t) => staffTab(t) === tab);
   return (
     <>
+     <StreakBanner s={s.onTime} />
       <h2 className="section-title">My tasks</h2>
       <div className="tiles tabs-tiles" role="tablist">
         {STAFF_TABS.map(([k, label, cls]) => (
