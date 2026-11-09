@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ArrowUp, ArrowDown, GripVertical, ExternalLink } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
-import { Avatar, DeptTag, Due, PriorityPill, TaskStatus, ConflictPill, PerformancePill, OutsourcedTag } from './ui.jsx';
+import { Avatar, DeptTag, Due, PriorityPill, TaskStatus, ConflictPill, PerformancePill, OutsourcedTag, DirectorTag } from './ui.jsx';
 import { ACTIVE_TASKS } from '../utils.js';
 
 /*
@@ -29,6 +29,7 @@ export default function TaskRow({ t, meta, action, onMove, showDept = true, deta
           {showDept && t.sourcing !== 'outsourced' && <DeptTag dept={t.department} meta={meta} />}
           <TaskStatus status={t.status} sourcing={t.sourcing} meta={meta} />
           <OutsourcedTag t={t} />
+                    <DirectorTag show={req?.fromDirector} />
           {t.conflict?.active && <ConflictPill />}
           {t.update?.active && <span className="pill f-orange">Update #{t.update.round}</span>}
           {t.sourcing !== 'outsourced' && (t.assignee ? (

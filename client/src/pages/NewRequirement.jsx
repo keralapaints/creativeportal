@@ -6,12 +6,22 @@ import { useToast } from '../context/ToastContext.jsx';
 import { Empty } from '../components/ui.jsx';
 import { canRaise, isManager } from '../utils.js';
 
+const TEAM_HINT = {
+  creative: 'design, video edit, posters',
+  production: 'shoots, printing, production work',
+};
+
 export default function NewRequirement() {
   const { user, meta } = useAuth();
   const nav = useNavigate();
   const toast = useToast();
   const [campaigns, setCampaigns] = useState([]);
-  const [f, setF] = useState({ title: '', description: '', purpose: '', type: 'poster', usageType: '', campaign: '', priority: 'medium', deadline: '', references: '', department: user.department || '' });
+  const director = user.role === 'director';
+  const [f, setF] = useState({
+    title: '', description: '', purpose: '', type: 'poster', usageType: '', campaign: '',
+    priority: director ? 'high' : 'medium', deadline: '', references: '', department: user.department || '',
+    targetDepartments: ['creative'], // directors only: which teams get the request
+  });
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -21,16 +31,23 @@ export default function NewRequirement() {
 
   const categories = Object.entries(meta.USAGE_TYPES).filter(([, c]) => c.active !== false);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const toggleTarget = (d) => setF((x) => ({ ...x, targetDepartments: x.targetDepartments.includes(d) ? x.targetDepartments.filter((y) => y !== d) : [...x.targetDepartments, d] }));
+  const teamNames = (list) => (list.length > 1 ? 'Creative & Production' : meta.DEPARTMENTS[list[0]]?.label);
+
   const submit = async (e) => {
     e.preventDefault(); setErr('');
     if (!f.usageType) { setErr('Pick the requirement type (Campaign Creative, Daily Poster, …).'); return; }
+    if (director && !f.targetDepartments.length) { setErr('Pick Creative, Production or both.'); return; }
+    if (busy) return;
     setBusy(true);
     try {
       const r = await post('/requirements', {
         ...f, deadline: f.deadline || undefined, department: f.department || null, campaign: f.campaign || null,
         references: f.references.split('\n').map((s) => s.trim()).filter(Boolean),
       });
-      toast(`${r.code} raised. The coordinator has been notified`);
+      toast(director
+        ? `${r.code} sent to ${teamNames(f.targetDepartments)}. They can take it now`
+        : `${r.code} raised. The coordinator has been notified`);
       nav(`/requirements/${r._id}`);
     } catch (ex) { setErr(ex.message); setBusy(false); }
   };
@@ -40,7 +57,11 @@ export default function NewRequirement() {
       <div className="page-head">
         <div>
           <h1>Raise a requirement</h1>
-          <p className="muted">It goes to the Requirement Zone as <b>New</b>. The coordinator reviews it, categorises it and assigns it.</p>
+          <p className="muted">
+            {director
+              ? <>As a director, your request goes <b>straight to the teams</b> you pick. Their staff can take it right away, and the coordinator can also assign it.</>
+              : <>It goes to the Requirement Zone as <b>New</b>. The coordinator reviews it, categorises it and assigns it.</>}
+          </p>
         </div>
       </div>
       <form onSubmit={submit} className="stack" style={{ gap: 18, maxWidth: 860 }}>
@@ -65,9 +86,28 @@ export default function NewRequirement() {
           <label className="field"><span>Usage purpose</span><input className="input" value={f.purpose} onChange={(e) => set('purpose', e.target.value)} placeholder="Where will it be used? e.g. Instagram ads + outlet standees" /></label>
           <label className="field"><span>Details</span><textarea className="textarea" value={f.description} onChange={(e) => set('description', e.target.value)} placeholder="Sizes, text to include, mood, must-haves…" /></label>
         </section>
+
+        {/* ⭐ Directors pick which teams get the request */}
+        {director && (
+          <section className="panel director-box">
+            <div className="field">
+              <span>⭐ Send to</span>
+              <div className="target-picks">
+                {meta.WORK_DEPARTMENTS.map((d) => (
+                  <label key={d} className={`pick ${f.targetDepartments.includes(d) ? 'on' : ''}`}>
+                    <input type="checkbox" checked={f.targetDepartments.includes(d)} onChange={() => toggleTarget(d)} />
+                    <span><b>{meta.DEPARTMENTS[d].label}</b>{TEAM_HINT[d] && <span className="tiny muted"> · {TEAM_HINT[d]}</span>}</span>
+                  </label>
+                ))}
+              </div>
+              <small>One open task is created for each team you pick. Anyone in that team can take it, and the coordinator can assign it to a person.</small>
+            </div>
+          </section>
+        )}
+
         <section className="panel form-grid">
           <label className="field">
-            <span>Department</span>
+            <span>{director ? 'Raised for department' : 'Department'} {director && <span className="muted">(optional)</span>}</span>
             {isManager(user) ? (
               <select className="select" value={f.department} onChange={(e) => set('department', e.target.value)}>
                 <option value="">No department</option>
@@ -84,7 +124,7 @@ export default function NewRequirement() {
           </label>
           <label className="field"><span>Deadline <span className="muted">(optional)</span></span><input className="input" type="date" value={f.deadline} onChange={(e) => set('deadline', e.target.value)} /></label>
           <div className="field">
-            <span>Initial priority</span>
+            <span>{director ? 'Priority' : 'Initial priority'}</span>
             <div className="seg" role="group" aria-label="Priority">
               {meta.PRIORITIES.map((p) => <button type="button" key={p} aria-pressed={f.priority === p} onClick={() => set('priority', p)}>{p[0].toUpperCase() + p.slice(1)}</button>)}
             </div>
@@ -96,7 +136,7 @@ export default function NewRequirement() {
         </section>
         {err && <div className="error-box">{err}</div>}
         <div className="row">
-          <button className="btn" disabled={busy}>{busy ? 'Saving…' : 'Submit to Requirement Zone'}</button>
+          <button className="btn" disabled={busy}>{busy ? 'Saving…' : director ? `Send to ${teamNames(f.targetDepartments) || 'the team'}` : 'Submit to Requirement Zone'}</button>
           <button type="button" className="btn ghost" onClick={() => nav(-1)}>Cancel</button>
         </div>
       </form>

@@ -7,7 +7,7 @@ import RequirementCard from '../components/RequirementCard.jsx';
 import { Loader, Empty } from '../components/ui.jsx';
 import { canRaise, isManager } from '../utils.js';
 
-// [key, label, coordinator/admin only]
+// [key, label, director/admin/coordinator only]
 const TABS = [
   ['open', 'Open'],
   ['new', 'New'],
@@ -21,6 +21,9 @@ const TABS = [
   ['all', 'All'],
 ];
 
+// Filters kept in the URL (so links like /requirements?fromDirector=true work)
+const KEYS = ['department', 'type', 'usageType', 'campaign', 'sourcing', 'priority', 'performance', 'mine', 'fromDirector'];
+
 export default function Requirements() {
   const { user, meta } = useAuth();
   const [params, setParams] = useSearchParams();
@@ -30,26 +33,30 @@ export default function Requirements() {
   const [q, setQ] = useState('');
 
   const status = params.get('status') || 'open';
-  const keys = ['department', 'type', 'usageType', 'campaign', 'sourcing', 'priority', 'performance', 'mine'];
-  const p = Object.fromEntries(keys.map((k) => [k, params.get(k) || '']));
+  const p = Object.fromEntries(KEYS.map((k) => [k, params.get(k) || '']));
   const setParam = (k, v) => { const n = new URLSearchParams(params); if (v) n.set(k, v); else n.delete(k); setParams(n, { replace: true }); };
+  const activeFilters = KEYS.filter((k) => p[k]).length;
+  const clearFilters = () => { const n = new URLSearchParams(); if (params.get('status')) n.set('status', params.get('status')); setParams(n, { replace: true }); setQ(''); };
 
   useEffect(() => { api('/campaigns?all=true').then(setCampaigns).catch(() => {}); }, []);
   useEffect(() => {
     const t = setTimeout(() => {
       const qs = new URLSearchParams({ status });
-      keys.forEach((k) => { if (p[k]) qs.set(k, p[k]); });
+      KEYS.forEach((k) => { if (p[k]) qs.set(k, p[k]); });
       if (q.trim()) qs.set('q', q.trim());
       setItems(null); setErr('');
       api(`/requirements?${qs}`).then(setItems).catch((e) => setErr(e.message));
     }, q ? 250 : 0);
     return () => clearTimeout(t);
-  }, [status, ...keys.map((k) => p[k]), q]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [status, ...KEYS.map((k) => p[k]), q]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
       <div className="page-head">
-        <div><h1>Requirement Zone</h1><p className="muted">Every creative requirement raised by the departments.</p></div>
+        <div>
+          <h1>Requirement Zone</h1>
+          <p className="muted">{p.fromDirector ? '⭐ Requests raised by directors. Creative and Production can take them straight away.' : 'Every creative requirement raised by the departments and directors.'}</p>
+        </div>
         {canRaise(user, meta) && <Link to="/requirements/new" className="btn"><Plus size={18} /> Raise requirement</Link>}
       </div>
 
@@ -57,6 +64,7 @@ export default function Requirements() {
         {TABS.filter(([, , m]) => !m || isManager(user)).map(([k, label]) => (
           <button key={k} aria-pressed={status === k} onClick={() => setParam('status', k === 'open' ? '' : k)}>{label}</button>
         ))}
+        <button className="dir-tab" aria-pressed={Boolean(p.fromDirector)} onClick={() => setParam('fromDirector', p.fromDirector ? '' : 'true')}>⭐ Director requests</button>
       </div>
 
       <div className="toolbar">
@@ -90,16 +98,24 @@ export default function Requirements() {
           <option value="">Any performance</option>
           {Object.entries(meta.PERFORMANCE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
+        <select className="select" value={p.fromDirector} onChange={(e) => setParam('fromDirector', e.target.value)} aria-label="Director requests">
+          <option value="">All requests</option>
+          <option value="true">⭐ Director requests</option>
+        </select>
         <select className="select" value={p.mine} onChange={(e) => setParam('mine', e.target.value)} aria-label="Whose">
           <option value="">Everyone's</option>
           <option value="raised">Raised by me</option>
           {user.department && <option value="department">My department</option>}
         </select>
+        {(activeFilters > 0 || q) && <button className="btn ghost sm" onClick={clearFilters}>Clear filters</button>}
       </div>
 
       {err && <div className="error-box">{err}</div>}
       {!items ? <Loader /> : items.length === 0 ? (
-        <Empty title="No requirements match" action={canRaise(user, meta) && <Link to="/requirements/new" className="btn sm">Raise a requirement</Link>}>Try another tab or clear the filters.</Empty>
+        <Empty
+          title={p.fromDirector ? 'No director requests here' : 'No requirements match'}
+          action={canRaise(user, meta) && <Link to="/requirements/new" className="btn sm">Raise a requirement</Link>}
+        >Try another tab or clear the filters.</Empty>
       ) : (
         <div className="cards">{items.map((r) => <RequirementCard key={r._id} r={r} meta={meta} />)}</div>
       )}

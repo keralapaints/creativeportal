@@ -34,7 +34,11 @@ export function PerformancePill({ rating, meta }) {
   if (!rating) return null;
   return <span className={`pill ${PERF_CLS[rating]}`}>{meta?.PERFORMANCE?.[rating] || rating}</span>;
 }
-
+// ⭐ marks work requested by a director
+export function DirectorTag({ show }) {
+  if (!show) return null;
+  return <span className="pill dir-tag" title="Requested by a director">⭐ Director request</span>;
+}
 export function OutsourcedTag({ t }) {
   if (t.sourcing !== 'outsourced') return null;
   return <span className="pill out-tag">Outsourced · {t.vendor?.name || 'vendor'}</span>;

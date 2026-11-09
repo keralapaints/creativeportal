@@ -13,13 +13,14 @@ import { onTimeStats } from '../services/streaks.js';
 const router = Router();
 router.use(protect);
 
+// fromDirector lets the client show the ⭐ Director request badge and panels
 const TASK_POP = [
-  { path: 'requirement', select: 'code title type usageType department status campaign performance raisedBy', populate: [{ path: 'campaign', select: 'name' }, { path: 'raisedBy', select: 'name department' }] },
+  { path: 'requirement', select: 'code title type usageType department status campaign performance raisedBy fromDirector', populate: [{ path: 'campaign', select: 'name' }, { path: 'raisedBy', select: 'name department' }] },
   { path: 'assignee', select: 'name department' },
   { path: 'vendor.user', select: 'name company' },
 ];
 const TASK_FIELDS = '-activity -comments';
-const REQ_FIELDS = 'code title type usageType department priority deadline status readyToFulfill raisedBy createdAt fulfilledAt usage updateCount updateRequests sourcing campaign performance';
+const REQ_FIELDS = 'code title type usageType department priority deadline status readyToFulfill raisedBy createdAt fulfilledAt usage updateCount updateRequests sourcing campaign performance fromDirector targetDepartments';
 const REQ_POP = [{ path: 'raisedBy', select: 'name' }, { path: 'campaign', select: 'name' }];
 
 async function withTaskSummary(list) {
@@ -51,7 +52,7 @@ router.get('/', async (req, res) => {
     return res.json(out);
   }
 
-  /* ---------- Coordinator / Admin ---------- */
+  /* ---------- Director / Admin / Coordinator ---------- */
   if (isManager(u)) {
     const [reqs, active, review, usageUpdates, closedThisMonth, usedThisMonth, staff] = await Promise.all([
       Requirement.find({ status: { $in: OPEN_REQUIREMENT } }).select(REQ_FIELDS).populate(REQ_POP).sort({ createdAt: -1 }).lean(),
@@ -66,6 +67,8 @@ router.get('/', async (req, res) => {
     const internal = active.filter((t) => t.sourcing !== 'outsourced');
     const outsourced = active.filter((t) => t.sourcing === 'outsourced');
     const overdue = active.filter((t) => t.deadline && new Date(t.deadline) < now);
+    // ⭐ Director requests that nobody has taken yet
+    const directorWaiting = internal.filter((t) => t.status === 'open' && t.requirement?.fromDirector);
 
     // Per-staff queue summary for the Priority Funnel
     const queues = staff.map((p) => {
@@ -105,6 +108,7 @@ router.get('/', async (req, res) => {
         conflicts: active.filter((t) => t.conflict?.active).length,
         overdue: overdue.length,
         outsourcedActive: outsourced.length,
+        directorWaiting: directorWaiting.length,
         closedThisMonth,
         usedThisMonth,
       },
@@ -124,12 +128,13 @@ router.get('/', async (req, res) => {
           fulfilled: review.filter((t) => t.sourcing === 'outsourced').length,
         },
       },
+      directorWaiting,
       conflicts: active.filter((t) => t.conflict?.active),
       today: active.filter((t) => t.deadline && new Date(t.deadline) <= eod),
       pendingTaskReview: review.slice(0, 15),
       byDepartment,
     });
-        if (isAdmin(u)) {
+    if (isAdmin(u)) {
       const users = await User.aggregate([{ $match: { active: true } }, { $group: { _id: '$role', n: { $sum: 1 } } }]);
       out.users = Object.fromEntries(users.map((x) => [x._id, x.n]));
     }
@@ -147,9 +152,10 @@ router.get('/', async (req, res) => {
     out.staff = {
       tasks: [...mine, ...closed],
       available,
+      directorRequests: available.filter((t) => t.requirement?.fromDirector), // ⭐ open for my team
       today: mine.filter((t) => ACTIVE_TASK.includes(t.status) && t.deadline && new Date(t.deadline) <= eod),
       closedThisMonth: closed.filter((t) => t.closedAt && new Date(t.closedAt) >= monthStart).length,
-       onTime: await onTimeStats(u._id),
+      onTime: await onTimeStats(u._id), // streak, best, this month, badge
     };
   }
 

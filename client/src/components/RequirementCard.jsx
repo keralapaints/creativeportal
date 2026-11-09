@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Paperclip } from 'lucide-react';
-import { DeptTag, Due, PriorityPill, ReqStatus, UsageTag, PerformancePill } from './ui.jsx';
+import { DeptTag, Due, PriorityPill, ReqStatus, UsageTag, PerformancePill, DirectorTag } from './ui.jsx';
 import { OPEN_REQUIREMENT } from '../utils.js';
 
 export default function RequirementCard({ r, meta }) {
@@ -8,7 +8,7 @@ export default function RequirementCard({ r, meta }) {
   const closed = tasks.filter((t) => t.status === 'closed').length;
   const open = OPEN_REQUIREMENT.includes(r.status);
   return (
-    <Link to={`/requirements/${r._id}`} className={`ccard flag-${r.status}`}>
+        <Link to={`/requirements/${r._id}`} className={`ccard flag-${r.status} ${r.fromDirector ? 'from-director' : ''}`}>
       <div className="spread">
         <span className="code">{r.code} · {meta.REQUIREMENT_TYPES[r.type]}</span>
         <div className="row" style={{ gap: 6 }}>
@@ -28,6 +28,7 @@ export default function RequirementCard({ r, meta }) {
           <UsageTag value={r.usageType} meta={meta} />
           <DeptTag dept={r.department} meta={meta} />
           {r.sourcing === 'outsourced' && <span className="pill out-tag">Outsourced</span>}
+                    <DirectorTag show={r.fromDirector} />
           {r.references?.length > 0 && <span className="row muted" style={{ gap: 3 }}><Paperclip size={13} />{r.references.length}</span>}
         </span>
         <span className="row" style={{ gap: 6 }}>

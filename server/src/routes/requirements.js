@@ -11,7 +11,8 @@ import {
   REQUIREMENT_STATUS, PERFORMANCE,
 } from '../utils/config.js';
 import { escapeRx } from '../utils/dates.js';
-import { notify, managerIds } from '../services/notify.js';
+import { notify, managerIds, departmentStaffIds } from '../services/notify.js';
+import { syncRequirement } from '../services/requirements.js';
 import { compactGroup, placeTask, scopeOf } from '../services/ordering.js';
 
 const router = Router();
@@ -75,6 +76,7 @@ router.get('/', async (req, res) => {
   if (sourcing) f.sourcing = sourcing;
   if (priority) f.priority = priority;
   if (performance) f['performance.rating'] = performance;
+    if (req.query.fromDirector === 'true') f.fromDirector = true;
   if (mine === 'raised') f.raisedBy = req.user._id;
   if (mine === 'department' && req.user.department) f.department = req.user.department;
   if (q) { const rx = new RegExp(escapeRx(q), 'i'); f.$or = [{ title: rx }, { code: rx }, { description: rx }]; }
@@ -102,15 +104,55 @@ router.post('/', async (req, res) => {
   if (camp === false) return fail(res, 400, 'Pick a valid campaign.');
   const dept = isManager(req.user) ? (department || req.user.department || null) : req.user.department;
   if (dept && !DEPARTMENTS[dept]) return fail(res, 400, 'Pick a valid department.');
+  
+  // Director requests go straight to Creative / Production as open, self-assignable tasks
+  const director = req.user.role === 'director';
+  const targets = director
+    ? [...new Set((req.body.targetDepartments?.length ? req.body.targetDepartments : ['creative']))].filter((d) => WORK_DEPARTMENTS.includes(d))
+    : [];
+  if (director && !targets.length) return fail(res, 400, 'Pick Creative, Production or both.');
 
   const doc = new Requirement({
     code: `REQ-${String(await nextSeq('requirement')).padStart(4, '0')}`,
     title: title.trim(), description, purpose, type, usageType, campaign: camp?._id || null, priority, department: dept,
     deadline: deadline || undefined,
-    references: (references || []).map((s) => s.trim()).filter(Boolean),
+       references: (references || []).map((s) => s.trim()).filter(Boolean),
     raisedBy: req.user._id,
+    fromDirector: director,
+    targetDepartments: targets,
   });
-  doc.log(req.user, 'Raised the requirement');
+  doc.log(req.user, director ? `Raised as a director request for ${targets.map((d) => DEPARTMENTS[d].label).join(' & ')}` : 'Raised the requirement');
+
+  if (director) {
+    // Auto-approve and open one self-assignable task per department
+    doc.status = 'approved'; doc.approvedAt = new Date(); doc.approvedBy = req.user._id; doc.targetDepartment = targets[0];
+    await doc.save();
+    for (const d of targets) {
+      const t = new Task({
+        code: `TSK-${String(await nextSeq('task')).padStart(4, '0')}`,
+        requirement: doc._id,
+        title: targets.length > 1 ? `${doc.title} – ${DEPARTMENTS[d].label.split(' ')[0]}` : doc.title,
+        notes: description, department: d, allowSelfAssign: true, status: 'open',
+        deadline: doc.deadline,
+      });
+      await placeTask(t, doc.priority, null);
+      t.log(req.user, `Director request · open for self-assignment in ${DEPARTMENTS[d].label}`);
+      await t.save();
+      notify(await departmentStaffIds(d), {
+        type: 'task_available', title: `⭐ Director request: ${doc.code}`,
+        message: `${req.user.name} needs "${doc.title}" (${priority} priority${doc.deadline ? `, due ${doc.deadline.toLocaleDateString('en-IN')}` : ''}). Take it from Available tasks.`,
+        link: `/tasks/${t._id}`, actor: req.user,
+      });
+    }
+    await syncRequirement(doc._id, req.user); // → Assigned (to the departments)
+    notify(await managerIds(), {
+      type: 'requirement_new', title: `⭐ Director request ${doc.code}`,
+      message: `${req.user.name} raised "${doc.title}" for ${targets.map((d) => DEPARTMENTS[d].label).join(' & ')}. Staff can self-assign, or you can assign it.`,
+      link: link(doc), actor: req.user,
+    });
+    return res.status(201).json(await withTasks(doc._id));
+  }
+
   await doc.save();
   notify(await managerIds(), {
     type: 'requirement_new', title: `New requirement ${doc.code}`,

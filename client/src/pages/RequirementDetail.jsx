@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ExternalLink, Plus, Pencil, Ban, Trash2, CheckCircle2, BadgeCheck, Flag, RefreshCw, Star, Truck } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Plus, Pencil, Ban, Trash2, CheckCircle2, BadgeCheck, Flag, RefreshCw, Star, Truck, Hand } from 'lucide-react';
 import { api, post, patch } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import TaskRow from '../components/TaskRow.jsx';
 import StatusFlow from '../components/StatusFlow.jsx';
-import { Avatar, DeptTag, Due, Loader, Modal, PriorityPill, ReqStatus, UsageTag, Empty, PerformancePill } from '../components/ui.jsx';
+import { Avatar, DeptTag, Due, Loader, Modal, PriorityPill, ReqStatus, UsageTag, Empty, PerformancePill, DirectorTag } from '../components/ui.jsx';
 import { OPEN_REQUIREMENT, FULFILLED_REQUIREMENT, ago, canMarkUsage, fmtDate, fmtDateTime, isManager, isAdmin, toInputDate, money } from '../utils.js';
 
 const strip = (l) => l.replace(/^https?:\/\//, '').slice(0, 70);
@@ -296,6 +296,7 @@ export default function RequirementDetail() {
   const [err, setErr] = useState('');
   const [modal, setModal] = useState(null);
   const [comment, setComment] = useState('');
+  const [taking, setTaking] = useState(null); // task id being taken (prevents double clicks)
   const manager = isManager(user); // director, admin or coordinator
 
   const load = useCallback(() => api(`/requirements/${id}`).then(setR).catch((e) => setErr(e.message)), [id]);
@@ -322,6 +323,20 @@ export default function RequirementDetail() {
   const openUpdate = (r.updateRequests || []).find((u) => u.status === 'open');
   const vendors = people.filter((p) => p.role === 'vendor');
 
+  // ⭐ Creative / Production staff can take an open task straight from here
+  const canTake = (t) => user.role === 'staff' && t.department === user.department && t.status === 'open' && t.allowSelfAssign && t.sourcing !== 'outsourced';
+  const openTasks = r.tasks.filter((t) => t.status === 'open');
+  const take = async (t) => {
+    if (taking) return;
+    setTaking(t._id);
+    try {
+      await post(`/tasks/${t._id}/self-assign`);
+      toast(`You took ${t.code}. It's in your queue`);
+      window.dispatchEvent(new Event('cd:notifications'));
+      await load();
+    } catch (e) { toast(e.message, 'err'); load(); } finally { setTaking(null); }
+  };
+
   const act = async (path, body, msg) => {
     try { setR(await post(`/requirements/${id}/${path}`, body)); setModal(null); toast(msg); window.dispatchEvent(new Event('cd:notifications')); } catch (e) { toast(e.message, 'err'); }
   };
@@ -337,6 +352,7 @@ export default function RequirementDetail() {
             <ReqStatus status={r.status} meta={meta} />
             <UsageTag value={r.usageType} meta={meta} />
             {r.sourcing === 'outsourced' && <span className="pill out-tag">Outsourced</span>}
+            <DirectorTag show={r.fromDirector} />
             <PriorityPill value={r.priority} />
             <Due date={r.deadline} closed={!open} />
             <PerformancePill rating={r.performance?.rating} meta={meta} />
@@ -359,7 +375,18 @@ export default function RequirementDetail() {
         <StatusFlow status={r.status} meta={meta} updates={r.updateCount || 0} />
       </section>
 
-      {open && NOTICE[r.status] && !ready && <div className={`notice ${r.status === 'update_needed' ? 'orange' : ''}`}>{NOTICE[r.status](manager)}</div>}
+      {/* ⭐ Director request: open for the chosen teams */}
+      {r.fromDirector && open && openTasks.length > 0 && (
+        <div className="notice director-notice">
+          ⭐ Director request from {r.raisedBy?.name}.{' '}
+          {manager
+            ? 'Staff in the chosen teams can take it, or open the task and assign it to someone.'
+            : openTasks.some(canTake)
+              ? 'Your team can take this now. Click "Take" below.'
+              : `Sent straight to ${(r.targetDepartments || []).map((d) => meta.DEPARTMENTS[d]?.label).filter(Boolean).join(' & ') || 'Creative / Production'}.`}
+        </div>
+      )}
+      {open && NOTICE[r.status] && !ready && !(r.fromDirector && openTasks.length > 0) && <div className={`notice ${r.status === 'update_needed' ? 'orange' : ''}`}>{NOTICE[r.status](manager)}</div>}
       {openUpdate && (
         <section className="panel update-panel" style={{ marginBottom: 18 }}>
           <h2 className="row" style={{ gap: 8 }}><RefreshCw size={18} /> Update #{r.updateCount} requested</h2>
@@ -394,7 +421,16 @@ export default function RequirementDetail() {
               <Empty title="No tasks yet" action={manager && open && r.status !== 'new' && <button className="btn sm" onClick={() => setModal('task')}><Plus size={15} /> Assign task</button>}>
                 {manager ? (r.status === 'new' ? 'Review and approve it first.' : 'Assign it to internal staff or outsource it. Create several tasks if it needs both Creative and Production.') : 'The coordinator will assign this.'}
               </Empty>
-            ) : <div className="list">{r.tasks.map((t) => <TaskRow key={t._id} t={t} meta={meta} />)}</div>}
+            ) : (
+              <div className="list">
+                {r.tasks.map((t) => (
+                  <TaskRow
+                    key={t._id} t={t} meta={meta}
+                    action={canTake(t) ? <button className="btn sm" disabled={Boolean(taking)} onClick={() => take(t)}><Hand size={15} /> {taking === t._id ? 'Taking…' : 'Take'}</button> : null}
+                  />
+                ))}
+              </div>
+            )}
             {r.tasks.filter((t) => t.driveLink).length > 0 && (
               <div className="deliverables">
                 <h3>Delivered files</h3>
@@ -444,7 +480,8 @@ export default function RequirementDetail() {
             <dl className="kv">
               <dt>Requirement type</dt><dd>{meta.USAGE_TYPES[r.usageType]?.label || '—'}</dd>
               <dt>Department</dt><dd>{r.department ? <DeptTag dept={r.department} meta={meta} /> : '—'}</dd>
-              <dt>Raised by</dt><dd>{r.raisedBy?.name} · {fmtDate(r.createdAt)}</dd>
+              <dt>Raised by</dt><dd>{r.raisedBy?.name}{r.fromDirector ? ' (Director)' : ''} · {fmtDate(r.createdAt)}</dd>
+              {r.fromDirector && r.targetDepartments?.length > 0 && <><dt>Sent to</dt><dd>{r.targetDepartments.map((d) => meta.DEPARTMENTS[d]?.label).filter(Boolean).join(' & ')}</dd></>}
               <dt>Deadline</dt><dd>{r.deadline ? fmtDate(r.deadline) : 'None'}</dd>
               <dt>Handled by</dt><dd>{r.sourcing === 'outsourced' ? 'Outsourced' : 'Internal'}{r.targetDepartment ? ` · ${meta.DEPARTMENTS[r.targetDepartment]?.label}` : ''}</dd>
               {r.approvedBy && <><dt>Approved</dt><dd>{r.approvedBy.name} · {fmtDate(r.approvedAt)}</dd></>}

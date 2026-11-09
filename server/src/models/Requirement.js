@@ -41,6 +41,9 @@ const requirementSchema = new Schema(
     deadline: Date,
     references: [String],
     raisedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+        // Raised by a director: shown to Creative / Production, who can self-assign straight away
+    fromDirector: { type: Boolean, default: false },
+    targetDepartments: [String],
 
     // new → approved → assigned → in_progress → fulfilled → (update_needed → fulfilled)* → task_completed
     status: { type: String, enum: Object.keys(REQUIREMENT_STATUS), default: 'new' },
@@ -82,7 +85,7 @@ const requirementSchema = new Schema(
 requirementSchema.index({ status: 1, department: 1 });
 requirementSchema.index({ raisedBy: 1, status: 1 });
 requirementSchema.index({ campaign: 1 });
-
+requirementSchema.index({ fromDirector: 1, status: 1 });
 requirementSchema.methods.log = function log(user, message) {
   this.activity.push({ user: user?._id || user, message });
   audit({ user: user?._id || user || null, entity: 'requirement', entityId: this._id, code: this.code, message });

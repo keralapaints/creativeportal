@@ -719,3 +719,10 @@ a.tile:hover, button.tile:hover { border-color: var(--ink-2); }
 .sb-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #f8961e, #f94144); transition: width 0.6s ease; }
 .d-gold { background: #e0a400; }
 .n-kudos .notif-icon { background: #fff4d6; color: #b07d00; }
+/* ⭐ Director requests */
+.pill.dir-tag { background: #fff3c4; color: #8a5a00; border: 1px solid #f1d37a; }
+.ccard.from-director { box-shadow: inset 0 0 0 1px #f1d37a; }
+.director-box { background: #fffaf0; border-color: #f1d37a; }
+.target-picks { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+.director-panel { border-color: #f1d37a; background: #fffcf3; }
+.notice.director-notice { background: #fff3c4; }

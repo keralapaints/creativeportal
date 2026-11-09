@@ -16,8 +16,9 @@ import { celebrationFor, isOnTime } from '../services/streaks.js';
 const router = Router();
 router.use(protect);
 
+// fromDirector is included so task rows and pages can show the ⭐ Director request badge
 const POP = [
-  { path: 'requirement', select: 'code title type usageType department raisedBy deadline description purpose references status campaign performance', populate: [{ path: 'campaign', select: 'name' }, { path: 'raisedBy', select: 'name department' }] },
+  { path: 'requirement', select: 'code title type usageType department raisedBy deadline description purpose references status campaign performance fromDirector', populate: [{ path: 'campaign', select: 'name' }, { path: 'raisedBy', select: 'name department' }] },
   { path: 'assignee', select: 'name department' },
   { path: 'assignedBy', select: 'name' },
   { path: 'completedBy', select: 'name' },
@@ -29,7 +30,7 @@ const POP = [
   { path: 'activity.user', select: 'name' },
 ];
 const LIST_POP = [
-  { path: 'requirement', select: 'code title type usageType department status campaign performance', populate: { path: 'campaign', select: 'name' } },
+  { path: 'requirement', select: 'code title type usageType department status campaign performance fromDirector', populate: { path: 'campaign', select: 'name' } },
   { path: 'assignee', select: 'name department' },
   { path: 'vendor.user', select: 'name company' },
 ];
@@ -65,6 +66,17 @@ const finish = async (req, res, t, extra = {}) => {
   await syncRequirement(t.requirement, req.user);
   return send(res, t, extra);
 };
+
+// ⭐ Tell the director when someone picks up (or is given) their request
+async function tellDirector(t, who, actor, how) {
+  const r = await Requirement.findById(t.requirement).select('fromDirector raisedBy code title');
+  if (!r?.fromDirector) return;
+  notify([r.raisedBy], {
+    type: 'status', title: `⭐ ${r.code} ${how === 'self' ? 'taken' : 'assigned'}`,
+    message: `${who} ${how === 'self' ? 'took' : 'was assigned'} "${t.title}" from your request.`,
+    link: `/requirements/${r._id}`, actor,
+  });
+}
 
 async function checkAssignee(userId, department) {
   const u = await User.findById(userId);
@@ -321,6 +333,7 @@ router.post('/:id/assign', async (req, res) => {
   await compactGroup(t.priority, oldScope);
   notify([r.user._id], { type: 'task_assigned', title: `New task ${t.code}`, message: `${req.user.name} assigned you "${t.title}" (${t.priority} priority #${t.order}).`, link: link(t), actor: req.user });
   if (previous) notify([previous], { type: 'task_assigned', title: `${t.code} reassigned`, message: `"${t.title}" was moved to ${r.user.name}.`, link: link(t), actor: req.user });
+  if (!previous) await tellDirector(t, r.user.name, req.user, 'assigned');
   finish(req, res, t);
 });
 
@@ -336,6 +349,7 @@ router.post('/:id/self-assign', async (req, res) => {
   await t.save();
   await compactGroup(t.priority, oldScope);
   notify(await managerIds(), { type: 'self_assigned', title: `${t.code} self-assigned`, message: `${req.user.name} took "${t.title}".`, link: link(t), actor: req.user });
+  await tellDirector(t, req.user.name, req.user, 'self');
   finish(req, res, t);
 });
 
@@ -408,7 +422,7 @@ router.post('/:id/complete', async (req, res) => {
   await t.save();
   await compactGroup(prio, scope);
 
-   const onTime = isOnTime(t);
+  const onTime = isOnTime(t);
   const reqDoc = await Requirement.findById(t.requirement).select('raisedBy code');
   notify([...(await managerIds()), reqDoc?.raisedBy], {
     type: 'completed', title: `${t.code} ${t.update?.active ? 'update submitted' : 'fulfilled'}${onTime ? ' · on time ✓' : ''}`,
@@ -510,7 +524,7 @@ router.post('/:id/comments', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
-    if (!isAdmin(req.user)) return fail(res, 403, 'Only an admin or director can delete tasks.');
+  if (!isAdmin(req.user)) return fail(res, 403, 'Only an admin or director can delete tasks.');
   const t = await load(req, res); if (!t) return;
   const scope = scopeOf(t);
   await t.deleteOne();

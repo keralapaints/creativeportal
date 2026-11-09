@@ -8,7 +8,7 @@ import TaskRow from '../components/TaskRow.jsx';
 import Analytics from '../components/Analytics.jsx';
 import StatusFlow from '../components/StatusFlow.jsx';
 import { StreakBanner } from '../components/Celebration.jsx';
-import { Loader, Empty, DeptTag, Due, PriorityPill, ReqStatus, UsageTag, Stat, PerformancePill, Modal, Avatar } from '../components/ui.jsx';
+import { Loader, Empty, DeptTag, Due, PriorityPill, ReqStatus, UsageTag, Stat, PerformancePill, Modal, Avatar, DirectorTag } from '../components/ui.jsx';
 import { canRaise, isManager, isAdmin, isVendor, ago, fmtDate, OPEN_REQUIREMENT, ACTIVE_TASKS } from '../utils.js';
 
 function Panel({ title, note, children, link, className = '' }) {
@@ -38,6 +38,7 @@ function RequirementList({ list, meta, showTasks, action, empty = 'Nothing here'
                 {r.campaign?.name && <span className="pill">{r.campaign.name}</span>}
                 <DeptTag dept={r.department} meta={meta} />
                 {r.sourcing === 'outsourced' && <span className="pill out-tag">Outsourced</span>}
+                <DirectorTag show={r.fromDirector} />
                 <span className="muted">{r.raisedBy?.name} · {ago(r.createdAt)}</span>
               </div>
               {upd && <div className="small update-reason">Update: {upd.reason}</div>}
@@ -92,11 +93,13 @@ function AlertPopup() {
 function ManagerView({ d, meta, user }) {
   const c = d.counts;
   const o = d.outsourced;
+  const directorWaiting = d.directorWaiting || [];
   return (
     <>
       <div className="stats">
         <Stat Link={Link} to="/requirements?status=new" label="New – to review" value={c.pendingReview} tone={c.pendingReview ? 'warn' : ''} />
         <Stat Link={Link} to="/requirements?status=approved" label="Approved – to assign" value={c.toAssign} tone={c.toAssign ? 'warn' : ''} />
+        <Stat Link={Link} to="/requirements?fromDirector=true" label="⭐ Director requests open" value={c.directorWaiting ?? directorWaiting.length} tone={directorWaiting.length ? 'warn' : ''} />
         <Stat Link={Link} to="/requirements?status=ready" label="Ready to fulfill" value={c.readyToFulfill} tone={c.readyToFulfill ? 'good' : ''} />
         <Stat Link={Link} to="/requirements?status=update_needed" label="Update requests" value={c.updateRequests} tone={c.updateRequests ? 'orange' : ''} />
         <Stat Link={Link} to="/tasks?view=review" label="Tasks to review" value={c.awaitingReview} />
@@ -105,7 +108,21 @@ function ManagerView({ d, meta, user }) {
         <Stat Link={Link} to="/outsourced" label="Outsourced active" value={c.outsourcedActive} />
       </div>
 
-      <div className="dash-grid">
+      {/* ⭐ Director requests nobody has taken yet – coordinators can assign them */}
+      {directorWaiting.length > 0 && (
+        <Panel
+          title="⭐ Director requests – not taken yet"
+          note="Open for self-assign · assign if nobody takes it"
+          className="director-panel"
+          link={<Link to="/requirements?fromDirector=true" className="small">See all</Link>}
+        >
+          <div className="list">{directorWaiting.map((t) => (
+            <TaskRow key={t._id} t={t} meta={meta} action={<Link to={`/tasks/${t._id}`} className="btn sm ghost">Assign</Link>} />
+          ))}</div>
+        </Panel>
+      )}
+
+      <div className={`dash-grid ${directorWaiting.length ? 'mt' : ''}`}>
         <div className="stack" style={{ gap: 18 }}>
           <Panel title="New – review & categorise" note="Approve as internal or outsourced" link={<Link to="/requirements?status=new" className="small">Open zone</Link>}>
             <RequirementList list={d.pendingReview} meta={meta} empty="Nothing waiting for review"
@@ -234,13 +251,30 @@ function staffTab(t) {
 }
 const STAFF_TABS = [['assigned', 'Assigned', ''], ['progress', 'In Progress', 'tile-yellow'], ['fulfilled', 'Fulfilled', 'tile-green'], ['update', 'Update Needed', 'tile-orange'], ['completed', 'Completed', 'tile-blue']];
 
-function StaffView({ s, meta, onTake }) {
+function StaffView({ s, meta, onTake, taking }) {
   const [tab, setTab] = useState('assigned');
   const counts = Object.fromEntries(STAFF_TABS.map(([k]) => [k, s.tasks.filter((t) => staffTab(t) === k).length]));
   const list = s.tasks.filter((t) => staffTab(t) === tab);
+  const directorRequests = s.directorRequests || [];
+  // Director requests are shown in their own panel, so leave them out of "Available"
+  const otherAvailable = s.available.filter((t) => !t.requirement?.fromDirector);
+  const takeBtn = (t) => (
+    <button className="btn sm" disabled={Boolean(taking)} onClick={() => onTake(t)}><Hand size={15} /> {taking === t._id ? 'Taking…' : 'Take'}</button>
+  );
   return (
     <>
-     <StreakBanner s={s.onTime} />
+      {/* 🔥 On-time streak, badge and progress to the next badge */}
+      <StreakBanner s={s.onTime} />
+
+      {/* ⭐ Requests from directors, open for my team */}
+      {directorRequests.length > 0 && (
+        <Panel title="⭐ Director requests" note={`${directorRequests.length} open for your team – take one`} className="director-panel" link={<Link to="/requirements?fromDirector=true" className="small">See all</Link>}>
+          <div className="list">{directorRequests.map((t) => (
+            <TaskRow key={t._id} t={t} meta={meta} showDept={false} detailed action={takeBtn(t)} />
+          ))}</div>
+        </Panel>
+      )}
+
       <h2 className="section-title">My tasks</h2>
       <div className="tiles tabs-tiles" role="tablist">
         {STAFF_TABS.map(([k, label, cls]) => (
@@ -257,12 +291,12 @@ function StaffView({ s, meta, onTake }) {
           <Panel title="Today's tasks" note="Due today or overdue">
             {s.today.length ? <div className="list">{s.today.map((t) => <TaskRow key={t._id} t={t} meta={meta} showDept={false} />)}</div> : <Empty title="Nothing due today" />}
           </Panel>
-          <Panel title="Available for self-assignment" note={`${s.available.length} open`}>
-            {s.available.length ? (
-              <div className="list">{s.available.map((t) => (
-                <TaskRow key={t._id} t={t} meta={meta} showDept={false} action={<button className="btn sm" onClick={() => onTake(t)}><Hand size={15} /> Take</button>} />
+          <Panel title="Available for self-assignment" note={`${otherAvailable.length} open`}>
+            {otherAvailable.length ? (
+              <div className="list">{otherAvailable.map((t) => (
+                <TaskRow key={t._id} t={t} meta={meta} showDept={false} action={takeBtn(t)} />
               ))}</div>
-            ) : <Empty title="No open tasks">Tasks the coordinator opens for self-assignment show up here.</Empty>}
+            ) : <Empty title="No other open tasks">Tasks the coordinator opens for self-assignment show up here.</Empty>}
           </Panel>
         </div>
       </div>
@@ -348,11 +382,21 @@ export default function Dashboard() {
   const toast = useToast();
   const [d, setD] = useState(null);
   const [err, setErr] = useState('');
+  const [taking, setTaking] = useState(null); // task id being taken (prevents double clicks)
 
   const load = useCallback(() => api('/dashboard').then(setD).catch((e) => setErr(e.message)), []);
   useEffect(() => { load(); }, [load]);
 
-  const take = async (t) => { try { await post(`/tasks/${t._id}/self-assign`); toast(`You took ${t.code}`); load(); } catch (e) { toast(e.message, 'err'); } };
+  const take = async (t) => {
+    if (taking) return;
+    setTaking(t._id);
+    try {
+      await post(`/tasks/${t._id}/self-assign`);
+      toast(t.requirement?.fromDirector ? `⭐ You took ${t.code}. The director has been told` : `You took ${t.code}`);
+      window.dispatchEvent(new Event('cd:notifications'));
+      await load();
+    } catch (e) { toast(e.message, 'err'); load(); } finally { setTaking(null); }
+  };
 
   if (err) return <div className="error-box">{err}</div>;
   if (!d) return <Loader />;
@@ -373,14 +417,14 @@ export default function Dashboard() {
         </div>
         <div className="row">
           {d.unread > 0 && <Link to="/notifications" className="btn ghost">{d.unread} unread</Link>}
-          {canRaise(user, meta) && <Link to="/requirements/new" className="btn"><Plus size={18} /> Raise requirement</Link>}
+          {canRaise(user, meta) && <Link to="/requirements/new" className="btn"><Plus size={18} /> {user.role === 'director' ? 'New director request' : 'Raise requirement'}</Link>}
         </div>
       </div>
       {!isVendor(user) && <Analytics />}
       {d.vendor && <VendorView v={d.vendor} meta={meta} />}
       {isManager(user) && <ManagerView d={d} meta={meta} user={user} />}
       {d.raiser && <RaiserView r={d.raiser} meta={meta} user={user} />}
-      {d.staff && <div style={{ marginTop: d.raiser ? 28 : 0 }}><StaffView s={d.staff} meta={meta} onTake={take} /></div>}
+      {d.staff && <div style={{ marginTop: d.raiser ? 28 : 0 }}><StaffView s={d.staff} meta={meta} onTake={take} taking={taking} /></div>}
       {!isManager(user) && !d.staff && !d.raiser && !d.vendor && <Empty title="No department set">Ask an admin to add you to a department.</Empty>}
     </>
   );
